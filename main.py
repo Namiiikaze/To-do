@@ -1,11 +1,13 @@
-"""Todo API: FastAPI + SQLite. Also serves the React page from ./static."""
+"""Todo API: FastAPI + SQLite. Also serves the React page (index.html)."""
+import os
 import sqlite3
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-DB = Path(__file__).parent / "todos.db"
+# Vercel's filesystem is read-only except /tmp (data there is temporary).
+DB = Path("/tmp/todos.db") if os.environ.get("VERCEL") else Path(__file__).parent / "todos.db"
 app = FastAPI(title="Todo API")
 
 
@@ -89,4 +91,6 @@ def delete_task(tid: int):
     return {"ok": True}
 
 
-app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).parent / "index.html")
