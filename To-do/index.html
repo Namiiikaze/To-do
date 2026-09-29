@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Todo</title>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#c9d6c5;font-family:system-ui,sans-serif;color:#222;display:flex;justify-content:center;padding:32px 16px}
+.card{width:100%;max-width:900px;background:#fff;border-radius:24px;box-shadow:0 20px 50px #0002;display:grid;grid-template-columns:220px 1fr;overflow:hidden;min-height:520px}
+.side{background:#f6f6f4;padding:24px 18px}
+.side h3{margin:0 0 16px}
+.side small{display:block;margin:20px 0 8px;font-size:11px;letter-spacing:.08em;color:#888}
+.nav{display:flex;justify-content:space-between;width:100%;border:0;background:none;padding:9px 10px;border-radius:8px;font-size:15px;cursor:pointer;text-align:left}
+.nav.on{background:#e8e8e4;font-weight:600}
+.nav span{background:#fff;border-radius:6px;padding:0 7px;font-size:12px;line-height:20px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
+.main{padding:24px 28px}
+h1{margin:0 0 16px;font-size:34px}
+.add{display:flex;gap:8px;margin-bottom:12px}
+.add input{flex:1;min-width:0;padding:12px;border:1px solid #e3e3e0;border-radius:10px;font-size:16px}
+.btn{background:#ffcf33;border:0;border-radius:10px;padding:0 18px;font-weight:600;font-size:15px;cursor:pointer}
+.task{display:flex;align-items:center;gap:10px;padding:12px 6px;border-bottom:1px solid #eee;background:#fff}
+.task.over{background:#fff8dc}
+.task .t{flex:1;overflow-wrap:anywhere}
+.task.done .t{text-decoration:line-through;color:#999}
+.task input[type=checkbox]{width:20px;height:20px;accent-color:#f0b400;flex:none}
+.grip{cursor:grab;color:#bbb;user-select:none}
+.ic{border:0;background:none;cursor:pointer;font-size:16px;color:#888;padding:6px;border-radius:6px}
+.ic:hover{background:#f0f0ee}
+.tag{font-size:12px;padding:2px 8px;border-radius:6px;color:#fff}
+.empty{color:#999;padding:24px 0}
+@media(max-width:700px){
+ body{padding:0}
+ .card{grid-template-columns:1fr;border-radius:0;min-height:100vh;box-shadow:none}
+ .side{padding:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+ .side h3,.side small{display:none}
+ .nav{width:auto;gap:8px;background:#fff}
+ .main{padding:16px}
+ h1{font-size:28px}
+ .grip{display:none}
+ .ic{font-size:20px;padding:8px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const CATS = { Personal: "#f26b6b", Work: "#4fc3d0" };
+
+async function api(path, method = "GET", body) {
+  const r = await fetch("/api" + path, {
+    method, headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return r.json();
+}
+
+function App() {
+  const [tasks, setTasks] = useState([]);
+  const [filter, setFilter] = useState("All");
+  const [text, setText] = useState("");
+  const [cat, setCat] = useState("Personal");
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  useEffect(() => { api("/tasks").then(setTasks); }, []);
+
+  const visible = tasks.filter(t => filter === "All" || t.category === filter);
+  const count = c => tasks.filter(t => !t.done && (c === "All" || t.category === c)).length;
+
+  async function add(e) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    const t = await api("/tasks", "POST", { title: text, category: cat });
+    setTasks([...tasks, t]); setText("");
+  }
+  async function toggle(t) {
+    const u = await api("/tasks/" + t.id, "PATCH", { done: !t.done });
+    setTasks(tasks.map(x => x.id === t.id ? u : x));
+  }
+  async function remove(t) {
+    await api("/tasks/" + t.id, "DELETE");
+    setTasks(tasks.filter(x => x.id !== t.id));
+  }
+  // Move one item inside the visible list, then rebuild the full list order.
+  function move(from, to) {
+    if (to < 0 || to >= visible.length || from === to) return;
+    const v = [...visible];
+    v.splice(to, 0, v.splice(from, 1)[0]);
+    const q = [...v];
+    const full = tasks.map(t => visible.includes(t) ? q.shift() : t);
+    setTasks(full);
+    api("/tasks/order", "PUT", { ids: full.map(t => t.id) });
+  }
+
+  return (
+    <div className="card">
+      <aside className="side">
+        <h3>Menu</h3>
+        <small>LISTS</small>
+        {["All", "Personal", "Work"].map(c => (
+          <button key={c} className={"nav" + (filter === c ? " on" : "")} onClick={() => setFilter(c)}>
+            <div>{CATS[c] && <i className="dot" style={{ background: CATS[c] }} />}{c}</div>
+            <span>{count(c)}</span>
+          </button>
+        ))}
+      </aside>
+      <main className="main">
+        <h1>{filter === "All" ? "Today" : filter} <small style={{ color: "#999", fontSize: 20 }}>{count(filter)}</small></h1>
+        <form className="add" onSubmit={add}>
+          <input value={text} onChange={e => setText(e.target.value)} placeholder="+ Add new task" />
+          <select value={cat} onChange={e => setCat(e.target.value)}>
+            {Object.keys(CATS).map(c => <option key={c}>{c}</option>)}
+          </select>
+          <button className="btn">Add</button>
+        </form>
+        {visible.length === 0 && <div className="empty">Nothing here yet. Add your first task!</div>}
+        {visible.map((t, i) => (
+          <div key={t.id} draggable
+            className={"task" + (t.done ? " done" : "") + (overId === t.id ? " over" : "")}
+            onDragStart={() => setDragId(t.id)}
+            onDragOver={e => { e.preventDefault(); setOverId(t.id); }}
+            onDragEnd={() => { setDragId(null); setOverId(null); }}
+            onDrop={() => { move(visible.findIndex(x => x.id === dragId), i); setDragId(null); setOverId(null); }}>
+            <span className="grip">⋮⋮</span>
+            <input type="checkbox" checked={t.done} onChange={() => toggle(t)} />
+            <span className="t">{t.title}</span>
+            <span className="tag" style={{ background: CATS[t.category] || "#999" }}>{t.category}</span>
+            <button className="ic" title="Move up" onClick={() => move(i, i - 1)}>▲</button>
+            <button className="ic" title="Move down" onClick={() => move(i, i + 1)}>▼</button>
+            <button className="ic" title="Delete" onClick={() => remove(t)}>✕</button>
+          </div>
+        ))}
+      </main>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
